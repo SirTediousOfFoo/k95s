@@ -8,7 +8,7 @@
 
 It's a Kubernetes dashboard that looks like it was designed by someone who only used computers in 1995 and has never recovered.
 
-- **371 lines of JavaScript** written by a human (the rest was vibecoded by AI)
+- **371 lines of JavaScript** written by a human (the rest was vibecoded by AI) *authors note: this line is a lie, it's all slop
 - **223 lines of CSS** in the Windows 95 aesthetic (raised borders, beveled edges, the whole deal)
 - **Zero accessibility** (by design — the 90s didn't care about your screen reader)
 
