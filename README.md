@@ -60,8 +60,8 @@ chmod +x k95s-*.AppImage
 
 Settings are persisted in your platform's app data directory:
 
-- **macOS:** `~/Library/Application Support/k95s/funkube-settings.json`
-- **Linux:** `~/.config/k95s/funkube-settings.json`
+- **macOS:** `~/Library/Application Support/k95s/settings.json`
+- **Linux:** `~/.config/k95s/settings.json`
 
 You can configure:
 - Kubeconfig path (defaults to `~/.kube/config`)

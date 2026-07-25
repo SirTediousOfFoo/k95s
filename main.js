@@ -36,7 +36,7 @@ const k8s = require('@kubernetes/client-node')
 // ---------------------------------------------------------------------------
 // Settings persistence
 // ---------------------------------------------------------------------------
-const settingsPath = path.join(app.getPath('userData'), 'funkube-settings.json')
+const settingsPath = path.join(app.getPath('userData'), 'k95s-settings.json')
 
 function loadSettings () {
   try {
