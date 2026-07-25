@@ -2,6 +2,7 @@
 
 const { contextBridge, ipcRenderer } = require('electron')
 
+// Expose IPC event listeners for streaming logs
 contextBridge.exposeInMainWorld('kubeAPI', {
   // Window controls
   minimize:  () => ipcRenderer.invoke('window:minimize'),
@@ -28,7 +29,6 @@ contextBridge.exposeInMainWorld('kubeAPI', {
   getLogs:     (opts) => ipcRenderer.invoke('k8s:getLogs', opts),
   startLogStream: (opts) => ipcRenderer.invoke('k8s:startLogStream', opts),
   stopLogStream:  (opts) => ipcRenderer.invoke('k8s:stopLogStream', opts),
-  readLogFile:  (opts) => ipcRenderer.invoke('k8s:readLogFile', opts),
   getYaml:     (opts) => ipcRenderer.invoke('k8s:getYaml', opts),
 
   // Actions
@@ -46,5 +46,10 @@ contextBridge.exposeInMainWorld('kubeAPI', {
   getOwnedPods: (opts) => ipcRenderer.invoke('k8s:getOwnedPods', opts),
 
   // Diagnostics
-  getDiagnostics: () => ipcRenderer.invoke('k8s:getDiagnostics')
+  getDiagnostics: () => ipcRenderer.invoke('k8s:getDiagnostics'),
+
+  // IPC event listeners for streaming logs
+  onLogLine: (cb) => ipcRenderer.on('log-line', cb),
+  onLogError: (cb) => ipcRenderer.on('log-error', cb),
+  onLogExited: (cb) => ipcRenderer.on('log-exited', cb),
 })

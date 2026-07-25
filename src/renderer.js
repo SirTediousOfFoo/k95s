@@ -639,8 +639,13 @@ function selectRow (idx) {
   const row = document.querySelector(`#resource-table tbody tr[data-idx="${idx}"]`)
   if (row) row.classList.add('selected')
 
-  // Stop log streaming when switching to a different pod
-  if (state.currentTab === 'logs') stopLogPolling()
+  // Restart log streaming when switching pods on the logs tab
+  if (state.currentTab === 'logs' && state.selectedResource && HAS_LOGS.has(state.currentType)) {
+    stopLogPolling()
+    loadDetail('logs')  // restarts stream for new pod
+  } else {
+    stopLogPolling()
+  }
 
   if (state.selectedResource) {
     if (state.currentType === 'pods') {
@@ -808,30 +813,39 @@ async function loadDetail (tab) {
       pre.innerHTML = `<span style="color:#ff6060">Error: ${escHtml(r.error)}</span>`
       return
     }
-    // Read initial content
-    const initial = await kubeAPI.readLogFile({ file: r.file })
-    pre.innerHTML = initial ? escHtml(initial).replace(/\n/g, '<br>') : '<span class="detail-placeholder">Waiting for logs…</span>'
-    // Start polling for new lines
-    stopLogPolling()
-    state.logStream = { file: r.file, container, podName: res.name, namespace: res.namespace }
-    state.logLastSize = 0
-    // Poll every 500ms for new lines
+    // Clear and show waiting message
     const preEl = document.getElementById('detail-text')
-    state.logPollInterval = setInterval(async () => {
-      try {
-        const current = await kubeAPI.readLogFile({ file: r.file })
-        if (current && current.length > state.logLastSize) {
-          const newContent = current.slice(state.logLastSize)
-          state.logLastSize = current.length
-          // Append new lines
-          const br = newContent.replace(/\n/g, '<br>')
-          preEl.innerHTML += br
-          // Auto-scroll to bottom
-          const dc = document.getElementById('detail-content')
-          dc.scrollTop = dc.scrollHeight
-        }
-      } catch {}
-    }, 500)
+    preEl.innerHTML = '<span class="detail-placeholder">Waiting for logs…</span>'
+    // Stream log lines as they arrive
+    stopLogPolling()
+    const dc = document.getElementById('detail-content')
+    const existingListener = state.logStream?.listener
+    if (existingListener) {
+      kubeAPI.onLogLine(existingListener)
+      kubeAPI.onLogError(state.logStream.errorListener)
+      kubeAPI.onLogExited(state.logStream.exitedListener)
+    }
+    let buffer = ''
+    const onLogLine = (event, line) => {
+      // Ignore events from old streams (when switching pods/tabs)
+      if (!state.logStream || state.logStream.podName !== res.name || state.logStream.namespace !== res.namespace) return
+      if (preEl.querySelector('.detail-placeholder')) preEl.innerHTML = ''
+      buffer += escHtml(line).replace(/\n/g, '<br>')
+      preEl.innerHTML = buffer
+      dc.scrollTop = dc.scrollHeight
+    }
+    const onLogError = (event, err) => {
+      if (!state.logStream) return
+      preEl.innerHTML += `<br><span style="color:#ff6060">[stream error: ${escHtml(err)}]</span>`
+    }
+    const onLogExited = () => {
+      if (!state.logStream) return
+      preEl.innerHTML += '<br><span style="color:#806000">[stream exited]</span>'
+    }
+    kubeAPI.onLogLine(onLogLine)
+    kubeAPI.onLogError(onLogError)
+    kubeAPI.onLogExited(onLogExited)
+    state.logStream = { listener: onLogLine, errorListener: onLogError, exitedListener: onLogExited, podName: res.name, namespace: res.namespace, container }
   } else if (tab === 'yaml') {
     const r = await kubeAPI.getYaml({ resourceType: resType, name: res.name, namespace: res.namespace || null })
     pre.innerHTML = r.error
@@ -843,16 +857,14 @@ async function loadDetail (tab) {
 }
 
 function stopLogPolling () {
-  if (state.logPollInterval) {
-    clearInterval(state.logPollInterval)
-    state.logPollInterval = null
-  }
   if (state.logStream) {
     const { podName, namespace, container } = state.logStream
     kubeAPI.stopLogStream({ podName, namespace, container })
+    // Remove listeners by re-registering no-ops
+    // (Electron IPC doesn't support removing specific listeners via contextBridge)
+    // Instead, we just clear state.logStream and ignore future events
     state.logStream = null
   }
-  state.logLastSize = 0
 }
 
 function syntaxYaml (text) {
