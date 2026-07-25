@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta http-equiv="Content-Security-Policy"
+    content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'"/>
+  <title>k95s</title>
+  <link rel="stylesheet" href="src/styles.css"/>
+</head>
+<body>
+<div id="app">
+
+  <!-- ── Title bar ─────────────────────────────────────── -->
+  <div id="titlebar">
+    <img src="icons/w98_computer_taskmgr.ico" class="ico14" alt="" style="margin-right:4px">
+    <span id="titlebar-title">k95s — Kubernetes Manager</span>
+    <div id="titlebar-buttons">
+      <button class="tbtn" id="btn-min"  title="Minimize">_</button>
+      <button class="tbtn" id="btn-max"  title="Maximize/Restore">□</button>
+      <button class="tbtn" id="btn-close" title="Close" style="font-weight:bold">✕</button>
+    </div>
+  </div>
+
+  <!-- ── Menu bar ──────────────────────────────────────── -->
+  <div id="menubar">
+    <div class="menu-entry" id="menu-file">
+      <span>File</span>
+      <div class="menu-dropdown">
+        <div class="menu-item" data-action="refresh">Refresh <span class="shortcut">F5</span></div>
+        <div class="menu-sep"></div>
+        <div class="menu-item" data-action="settings">Settings…</div>
+        <div class="menu-sep"></div>
+        <div class="menu-item" data-action="exit">Exit</div>
+      </div>
+    </div>
+    <div class="menu-entry" id="menu-view">
+      <span>View</span>
+      <div class="menu-dropdown">
+        <div class="menu-item" data-action="refresh">Refresh <span class="shortcut">F5</span></div>
+        <div class="menu-item" data-action="toggle-detail">Toggle Detail Panel</div>
+        <div class="menu-sep"></div>
+        <div class="menu-item" data-action="columns">Columns…</div>
+        <div class="menu-sep"></div>
+        <div class="menu-item" data-action="ns-all">All Namespaces</div>
+      </div>
+    </div>
+    <div class="menu-entry" id="menu-resource">
+      <span>Resource</span>
+      <div class="menu-dropdown">
+        <div class="menu-item" data-action="describe">Describe</div>
+        <div class="menu-item" data-action="show-yaml">View YAML</div>
+        <div class="menu-item" data-action="show-logs">Logs (pods only)</div>
+        <div class="menu-sep"></div>
+        <div class="menu-item" data-action="restart">Restart (rollout)…</div>
+        <div class="menu-item" data-action="scale">Scale…</div>
+        <div class="menu-sep"></div>
+        <div class="menu-item" data-action="delete">Delete…</div>
+      </div>
+    </div>
+    <div class="menu-entry" id="menu-help">
+      <span>Help</span>
+      <div class="menu-dropdown">
+        <div class="menu-item" data-action="about">About k95s</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Toolbar ───────────────────────────────────────── -->
+  <div id="toolbar">
+    <button class="tool-btn" id="tb-refresh" title="Refresh (F5)">
+      <img src="icons/w98_directory_open_refresh.ico" class="ico16" alt=""> Refresh
+    </button>
+    <div class="tool-sep"></div>
+    <button class="tool-btn disabled" id="tb-describe" title="Describe selected">
+      <img src="icons/w98_notepad.ico" class="ico16" alt=""> Describe
+    </button>
+    <button class="tool-btn disabled" id="tb-logs" title="View logs (pods)">
+      <img src="icons/w98_notepad_file.ico" class="ico16" alt=""> Logs
+    </button>
+    <button class="tool-btn disabled" id="tb-yaml" title="View YAML">
+      <img src="icons/w98_write_file.ico" class="ico16" alt=""> YAML
+    </button>
+    <div class="tool-sep"></div>
+    <button class="tool-btn disabled" id="tb-restart" title="Rollout restart">
+      <img src="icons/w98_gears.ico" class="ico16" alt=""> Restart
+    </button>
+    <button class="tool-btn disabled" id="tb-scale" title="Scale (deploy/sts)">
+      <img src="icons/w98_expand_hierarchial_array.ico" class="ico16" alt=""> Scale
+    </button>
+    <button class="tool-btn disabled" id="tb-delete" title="Delete resource" style="color:#800000">
+      <img src="icons/w98_recycle_bin_empty.ico" class="ico16" alt=""> Delete
+    </button>
+    <div class="tool-sep"></div>
+    <button class="tool-btn" id="tb-settings" title="Settings">
+      <img src="icons/w98_settings_gear.ico" class="ico16" alt=""> Settings
+    </button>
+    <div style="flex:1"></div>
+    <div id="search-box" style="display:flex;align-items:center;gap:3px;margin-right:4px">
+      <img src="icons/w98_search_file.ico" class="ico16" alt="">
+      <input type="text" id="search-input" class="win-input" placeholder="Filter…" style="width:130px;height:20px;font-size:11px;padding:1px 4px"/>
+    </div>
+  </div>
+
+  <!-- ── Address bar ───────────────────────────────────── -->
+  <div id="addressbar">
+    <label for="addr-namespace">Namespace:</label>
+    <select id="addr-namespace">
+      <option value="default">default</option>
+    </select>
+    <label for="addr-path">Path:</label>
+    <input id="addr-path" type="text" value="/" readonly tabindex="-1"/>
+    <label id="addr-context-label" style="color:#000080;font-weight:bold"></label>
+  </div>
+
+  <!-- ── Main content ──────────────────────────────────── -->
+  <div id="content">
+
+    <!-- Left panel: resource tree -->
+    <div id="left-panel">
+      <div id="tree-header">All Resources</div>
+      <div id="tree">
+
+        <!-- Workloads -->
+        <div class="tree-category" data-cat="workloads">
+          <span class="arrow">▼</span>
+          <img src="icons/w98_directory_closed.ico" class="ico16" alt="">
+          Workloads
+        </div>
+        <div class="tree-items" id="cat-workloads">
+          <div class="tree-item" data-type="pods">
+            <img src="icons/w98_computer.ico" class="ico16" alt=""> Pods
+          </div>
+          <div class="tree-item" data-type="deployments">
+            <img src="icons/w98_executable.ico" class="ico16" alt=""> Deployments
+          </div>
+          <div class="tree-item" data-type="statefulsets">
+            <img src="icons/w98_cylinder_database.ico" class="ico16" alt=""> StatefulSets
+          </div>
+          <div class="tree-item" data-type="daemonsets">
+            <img src="icons/w2k_computers.ico" class="ico16" alt=""> DaemonSets
+          </div>
+          <div class="tree-item" data-type="replicasets">
+            <img src="icons/w98_file_set.ico" class="ico16" alt=""> ReplicaSets
+          </div>
+          <div class="tree-item" data-type="jobs">
+            <img src="icons/w98_gears.ico" class="ico16" alt=""> Jobs
+          </div>
+          <div class="tree-item" data-type="cronjobs">
+            <img src="icons/w98_sched_tasks.ico" class="ico16" alt=""> CronJobs
+          </div>
+        </div>
+
+        <!-- Network -->
+        <div class="tree-category" data-cat="network">
+          <span class="arrow">▼</span>
+          <img src="icons/w98_network.ico" class="ico16" alt="">
+          Network
+        </div>
+        <div class="tree-items" id="cat-network">
+          <div class="tree-item" data-type="services">
+            <img src="icons/w98_network_normal_two_pcs.ico" class="ico16" alt=""> Services
+          </div>
+          <div class="tree-item" data-type="ingresses">
+            <img src="icons/w98_world.ico" class="ico16" alt=""> Ingresses
+          </div>
+        </div>
+
+        <!-- Config -->
+        <div class="tree-category" data-cat="config">
+          <span class="arrow">▼</span>
+          <img src="icons/w98_directory_closed.ico" class="ico16" alt="">
+          Config
+        </div>
+        <div class="tree-items" id="cat-config">
+          <div class="tree-item" data-type="configmaps">
+            <img src="icons/w98_regedit.ico" class="ico16" alt=""> ConfigMaps
+          </div>
+          <div class="tree-item" data-type="secrets">
+            <img src="icons/w98_key_gray.ico" class="ico16" alt=""> Secrets
+          </div>
+          <div class="tree-item" data-type="serviceaccounts">
+            <img src="icons/w98_users.ico" class="ico16" alt=""> ServiceAccounts
+          </div>
+        </div>
+
+        <!-- Storage -->
+        <div class="tree-category" data-cat="storage">
+          <span class="arrow">▼</span>
+          <img src="icons/w98_hard_disk_drive.ico" class="ico16" alt="">
+          Storage
+        </div>
+        <div class="tree-items" id="cat-storage">
+          <div class="tree-item" data-type="persistentvolumeclaims">
+            <img src="icons/w98_hard_disk_drive.ico" class="ico16" alt=""> PVCs
+          </div>
+        </div>
+
+        <!-- Cluster -->
+        <div class="tree-category" data-cat="cluster">
+          <span class="arrow">▼</span>
+          <img src="icons/w2k_computer.ico" class="ico16" alt="">
+          Cluster
+        </div>
+        <div class="tree-items" id="cat-cluster">
+          <div class="tree-item" data-type="nodes">
+            <img src="icons/w2k_computer.ico" class="ico16" alt=""> Nodes
+          </div>
+          <div class="tree-item" data-type="namespaces">
+            <img src="icons/w98_directory_closed.ico" class="ico16" alt=""> Namespaces
+          </div>
+          <div class="tree-item" data-type="events">
+            <img src="icons/w98_event_log.ico" class="ico16" alt=""> Events
+          </div>
+        </div>
+
+        <!-- Custom Resources -->
+        <div class="tree-category" data-cat="custom">
+          <span class="arrow">▼</span>
+          <img src="icons/w98_gears.ico" class="ico16" alt="">
+          Custom
+        </div>
+        <div class="tree-items" id="cat-custom">
+          <div class="tree-item" id="tree-add-custom">
+            <img src="icons/w98_file_question.ico" class="ico16" alt=""> Add resource…
+          </div>
+        </div>
+
+      </div><!-- #tree -->
+    </div><!-- #left-panel -->
+
+    <!-- Vertical resizer (tree ↔ right) -->
+    <div id="v-resizer"></div>
+
+    <!-- Right panel -->
+    <div id="right-panel">
+
+      <!-- Main area: list + detail stacked vertically -->
+      <div id="main-area">
+
+        <!-- Resource list header + table -->
+        <div id="resource-list-container">
+          <div id="resource-list-header">
+            <span id="resource-list-title">Select a resource type from the left panel</span>
+          </div>
+          <div id="resource-list">
+            <div class="empty-state">Select a resource type from the left panel to get started.</div>
+          </div>
+        </div>
+
+        <!-- Horizontal resizer (list ↔ detail) -->
+        <div id="h-resizer"></div>
+
+        <!-- Detail panel -->
+        <div id="detail-panel">
+          <div id="detail-tabs">
+            <button class="detail-tab active" data-tab="describe">Describe</button>
+            <button class="detail-tab" data-tab="logs">Logs</button>
+            <button class="detail-tab" data-tab="yaml">YAML</button>
+          </div>
+          <div id="detail-content">
+            <pre id="detail-text"><span class="detail-placeholder">Select a resource to view details.</span></pre>
+          </div>
+        </div>
+
+      </div><!-- #main-area -->
+
+      <!-- Sub-resource resizer (main-area ↔ sub-panel) -->
+      <div id="sub-v-resizer" class="hidden"></div>
+
+      <!-- Sub-resource panel (owned pods) -->
+      <div id="sub-panel" class="hidden">
+        <div id="sub-panel-header">
+          <img src="icons/w98_computer.ico" class="ico14" alt="">
+          <span id="sub-panel-title">Owned Pods</span>
+          <button class="tbtn" id="sub-panel-close" style="margin-left:auto">✕</button>
+        </div>
+        <div id="sub-pod-list">
+          <div class="empty-state">Select a resource to view owned pods.</div>
+        </div>
+      </div>
+
+    </div><!-- #right-panel -->
+  </div><!-- #content -->
+
+  <!-- ── Status bar ────────────────────────────────────── -->
+  <div id="statusbar">
+    <div class="status-cell grow" id="st-count">Ready</div>
+    <div class="status-cell" id="st-namespace" style="min-width:120px">NS: —</div>
+    <div class="status-cell" id="st-context"   style="min-width:160px">Context: —</div>
+    <div class="status-cell" id="st-msg"        style="min-width:80px"></div>
+  </div>
+
+  <!-- ── Progress bar (non-blocking) ───────────────────── -->
+  <div id="progress-bar" class="hidden">
+    <div id="progress-track">
+      <div id="progress-fill"></div>
+    </div>
+  </div>
+
+  <!-- ── Context menu (resource list) ──────────────────── -->
+  <div id="ctx-menu">
+    <div class="ctx-item" data-action="describe">
+      <img src="icons/w98_notepad.ico" class="ico16" alt=""> Describe
+    </div>
+    <div class="ctx-item" data-action="show-yaml">
+      <img src="icons/w98_write_file.ico" class="ico16" alt=""> View YAML
+    </div>
+    <div class="ctx-item ctx-logs" data-action="show-logs">
+      <img src="icons/w98_notepad_file.ico" class="ico16" alt=""> View Logs
+    </div>
+    <div class="ctx-sep"></div>
+    <div class="ctx-item ctx-restart" data-action="restart">
+      <img src="icons/w98_gears.ico" class="ico16" alt=""> Restart (rollout)
+    </div>
+    <div class="ctx-item ctx-scale" data-action="scale">
+      <img src="icons/w98_expand_hierarchial_array.ico" class="ico16" alt=""> Scale…
+    </div>
+    <div class="ctx-sep"></div>
+    <div class="ctx-item" data-action="delete" style="color:#800000">
+      <img src="icons/w98_recycle_bin_empty.ico" class="ico16" alt=""> Delete…
+    </div>
+  </div>
+
+  <!-- ── Context menu (custom tree item) ────────────────── -->
+  <div id="custom-tree-ctx-menu">
+    <div class="ctx-item" id="custom-ctx-edit">
+      <img src="icons/w98_notepad.ico" class="ico16" alt=""> Edit…
+    </div>
+    <div class="ctx-sep"></div>
+    <div class="ctx-item" id="custom-ctx-delete" style="color:#800000">
+      <img src="icons/w98_recycle_bin_empty.ico" class="ico16" alt=""> Remove…
+    </div>
+  </div>
+
+  <!-- ── Settings dialog ───────────────────────────────── -->
+  <div id="settings-overlay">
+    <div id="settings-dialog">
+      <div class="dialog-titlebar">
+        <img src="icons/w98_settings_gear.ico" class="ico14" alt="" style="margin-right:4px">
+        <span>Settings</span>
+        <button class="tbtn" id="settings-close" style="margin-left:auto">✕</button>
+      </div>
+      <div class="dialog-body">
+        <div class="field-row">
+          <label>Kubeconfig File</label>
+          <div class="field-row-inline">
+            <input class="win-input" id="set-kubeconfig" type="text" placeholder="(default: ~/.kube/config)"/>
+            <button class="win-btn" id="set-browse">Browse…</button>
+          </div>
+        </div>
+        <div class="field-row">
+          <label>Context</label>
+          <select class="win-select" id="set-context">
+            <option value="">(use default)</option>
+          </select>
+        </div>
+        <div class="field-row">
+          <label>Default Namespace</label>
+          <input class="win-input" id="set-namespace" type="text" value="default"/>
+        </div>
+        <div class="field-row" style="flex-direction:column;align-items:stretch;gap:4px">
+          <button class="win-btn" id="set-test-conn" style="align-self:flex-start">Test Connection</button>
+          <textarea id="set-diag-output" readonly
+            style="width:100%;height:90px;resize:none;font-family:monospace;font-size:10px;
+                   background:#000080;color:#fff;padding:4px;box-sizing:border-box;
+                   border:inset 2px #888;display:none"></textarea>
+        </div>
+      </div>
+      <div class="dialog-footer">
+        <button class="win-btn default" id="settings-ok">OK</button>
+        <button class="win-btn" id="settings-cancel">Cancel</button>
+        <button class="win-btn" id="settings-apply">Apply</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Scale dialog ──────────────────────────────────── -->
+  <div id="scale-overlay">
+    <div id="scale-dialog">
+      <div class="dialog-titlebar">
+        <img src="icons/w98_expand_hierarchial_array.ico" class="ico14" alt="" style="margin-right:4px">
+        <span>Scale Replicas</span>
+        <button class="tbtn" id="scale-close" style="margin-left:auto">✕</button>
+      </div>
+      <div class="dialog-body">
+        <div class="field-row">
+          <label id="scale-label">Replicas</label>
+          <input class="win-input" id="scale-input" type="number" min="0" max="100" value="1" style="width:80px"/>
+        </div>
+      </div>
+      <div class="dialog-footer">
+        <button class="win-btn default" id="scale-ok">OK</button>
+        <button class="win-btn" id="scale-cancel">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Confirm dialog ────────────────────────────────── -->
+  <div id="confirm-overlay">
+    <div id="confirm-dialog">
+      <div class="dialog-titlebar">
+        <img src="icons/w98_msg_warning.ico" class="ico14" alt="" style="margin-right:4px">
+        <span>Confirm</span>
+      </div>
+      <div class="confirm-body">
+        <img src="icons/w98_msg_warning.ico" class="ico32" alt="">
+        <div class="confirm-msg" id="confirm-msg">Are you sure?</div>
+      </div>
+      <div class="dialog-footer">
+        <button class="win-btn default" id="confirm-ok">OK</button>
+        <button class="win-btn" id="confirm-cancel">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Columns dialog ────────────────────────────────── -->
+  <div id="columns-overlay">
+    <div id="columns-dialog">
+      <div class="dialog-titlebar">
+        <img src="icons/w98_notepad.ico" class="ico14" alt="" style="margin-right:4px">
+        <span>Choose Columns</span>
+        <button class="tbtn" id="columns-close" style="margin-left:auto">✕</button>
+      </div>
+      <div class="dialog-body">
+        <div id="columns-checkboxes" style="display:flex;flex-direction:column;gap:6px;min-width:220px"></div>
+      </div>
+      <div class="dialog-footer">
+        <button class="win-btn default" id="columns-ok">OK</button>
+        <button class="win-btn" id="columns-cancel">Cancel</button>
+        <button class="win-btn" id="columns-reset">Reset</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Add / Edit Custom Resource dialog ────────────────── -->
+  <div id="add-custom-overlay">
+    <div id="add-custom-dialog">
+      <div class="dialog-titlebar">
+        <img src="icons/w98_gears.ico" class="ico14" alt="" style="margin-right:4px">
+        <span id="add-custom-title">Add Custom Resource</span>
+        <button class="tbtn" id="add-custom-close" style="margin-left:auto">✕</button>
+      </div>
+      <div class="dialog-body">
+        <div class="field-row">
+          <label>Display Name</label>
+          <input class="win-input" id="custom-name" type="text" placeholder="MyResource"/>
+        </div>
+        <div class="field-row">
+          <label>API Group</label>
+          <input class="win-input" id="custom-group" type="text" placeholder="my.group.io"/>
+        </div>
+        <div class="field-row">
+          <label>Version</label>
+          <input class="win-input" id="custom-version" type="text" value="v1"/>
+        </div>
+        <div class="field-row">
+          <label>Resource Plural</label>
+          <input class="win-input" id="custom-plural" type="text" placeholder="myresources"/>
+        </div>
+        <div class="field-row">
+          <label style="flex-direction:row;align-items:center;gap:8px;cursor:pointer">
+            <input type="checkbox" id="custom-namespaced" checked style="cursor:pointer"> Namespaced
+          </label>
+        </div>
+      </div>
+      <div class="dialog-footer">
+        <button class="win-btn default" id="add-custom-ok">OK</button>
+        <button class="win-btn" id="add-custom-cancel">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+</div><!-- #app -->
+<script src="src/renderer.js"></script>
+</body>
+</html>
