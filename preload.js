@@ -24,9 +24,12 @@ contextBridge.exposeInMainWorld('kubeAPI', {
   getResources: (opts) => ipcRenderer.invoke('k8s:getResources', opts),
 
   // Detail views
-  describe:  (opts) => ipcRenderer.invoke('k8s:describe', opts),
-  getLogs:   (opts) => ipcRenderer.invoke('k8s:getLogs', opts),
-  getYaml:   (opts) => ipcRenderer.invoke('k8s:getYaml', opts),
+  describe:    (opts) => ipcRenderer.invoke('k8s:describe', opts),
+  getLogs:     (opts) => ipcRenderer.invoke('k8s:getLogs', opts),
+  startLogStream: (opts) => ipcRenderer.invoke('k8s:startLogStream', opts),
+  stopLogStream:  (opts) => ipcRenderer.invoke('k8s:stopLogStream', opts),
+  readLogFile:  (opts) => ipcRenderer.invoke('k8s:readLogFile', opts),
+  getYaml:     (opts) => ipcRenderer.invoke('k8s:getYaml', opts),
 
   // Actions
   deleteResource:  (opts) => ipcRenderer.invoke('k8s:delete', opts),

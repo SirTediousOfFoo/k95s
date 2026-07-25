@@ -115,6 +115,10 @@ html, body {
   display: flex; align-items: center;
   height: 100%;
 }
+.menu-entry > span {
+  white-space: nowrap;
+  flex-shrink: 0;
+}
 .menu-entry:hover, .menu-entry.open {
   background: var(--selected-bg);
   color: var(--selected-fg);

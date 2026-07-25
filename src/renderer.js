@@ -25,7 +25,11 @@ const state = {
   // Metrics auto-refresh interval id
   metricsInterval:   null,
   // Search filter
-  filterText:        ''
+  filterText:        '',
+  // Log streaming
+  logStream:         null,   // { file, container, podName, namespace }
+  logPollInterval:   null,
+  logLastSize:       0
 }
 
 // Resource types that support certain actions
@@ -635,6 +639,9 @@ function selectRow (idx) {
   const row = document.querySelector(`#resource-table tbody tr[data-idx="${idx}"]`)
   if (row) row.classList.add('selected')
 
+  // Stop log streaming when switching to a different pod
+  if (state.currentTab === 'logs') stopLogPolling()
+
   if (state.selectedResource) {
     if (state.currentType === 'pods') {
       loadPodMetrics()   // async – no await
@@ -760,6 +767,8 @@ function setupDetailTabs () {
       document.querySelectorAll('.detail-tab').forEach(t => t.classList.remove('active'))
       tab.classList.add('active')
       state.currentTab = tab.dataset.tab
+      // Stop log streaming when leaving logs tab
+      if (state.currentTab !== 'logs') stopLogPolling()
       const ctx = state.detailContext
       const res = ctx ? ctx.resource : state.selectedResource
       if (res) loadDetail(state.currentTab)
@@ -793,11 +802,36 @@ async function loadDetail (tab) {
       return
     }
     const container = res.containers?.[0]
-    const r = await kubeAPI.getLogs({ podName: res.name, namespace: res.namespace, container, tail: 300 })
-    pre.innerHTML = r.error
-      ? `<span style="color:#ff6060">Error: ${escHtml(r.error)}</span>`
-      : escHtml(r.output)
-
+    // Start (or restart) streaming
+    const r = await kubeAPI.startLogStream({ podName: res.name, namespace: res.namespace, container })
+    if (r.error) {
+      pre.innerHTML = `<span style="color:#ff6060">Error: ${escHtml(r.error)}</span>`
+      return
+    }
+    // Read initial content
+    const initial = await kubeAPI.readLogFile({ file: r.file })
+    pre.innerHTML = initial ? escHtml(initial).replace(/\n/g, '<br>') : '<span class="detail-placeholder">Waiting for logs…</span>'
+    // Start polling for new lines
+    stopLogPolling()
+    state.logStream = { file: r.file, container, podName: res.name, namespace: res.namespace }
+    state.logLastSize = 0
+    // Poll every 500ms for new lines
+    const preEl = document.getElementById('detail-text')
+    state.logPollInterval = setInterval(async () => {
+      try {
+        const current = await kubeAPI.readLogFile({ file: r.file })
+        if (current && current.length > state.logLastSize) {
+          const newContent = current.slice(state.logLastSize)
+          state.logLastSize = current.length
+          // Append new lines
+          const br = newContent.replace(/\n/g, '<br>')
+          preEl.innerHTML += br
+          // Auto-scroll to bottom
+          const dc = document.getElementById('detail-content')
+          dc.scrollTop = dc.scrollHeight
+        }
+      } catch {}
+    }, 500)
   } else if (tab === 'yaml') {
     const r = await kubeAPI.getYaml({ resourceType: resType, name: res.name, namespace: res.namespace || null })
     pre.innerHTML = r.error
@@ -806,6 +840,19 @@ async function loadDetail (tab) {
   }
 
   document.getElementById('detail-content').scrollTop = 0
+}
+
+function stopLogPolling () {
+  if (state.logPollInterval) {
+    clearInterval(state.logPollInterval)
+    state.logPollInterval = null
+  }
+  if (state.logStream) {
+    const { podName, namespace, container } = state.logStream
+    kubeAPI.stopLogStream({ podName, namespace, container })
+    state.logStream = null
+  }
+  state.logLastSize = 0
 }
 
 function syntaxYaml (text) {

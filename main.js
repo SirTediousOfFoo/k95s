@@ -3,8 +3,9 @@
 const { app, BrowserWindow, ipcMain, dialog } = require('electron')
 const path = require('path')
 const fs = require('fs')
-const { execFileSync } = require('child_process')
+const { execFileSync, spawn } = require('child_process')
 const k8s = require('@kubernetes/client-node')
+const os = require('os')
 
 // ---------------------------------------------------------------------------
 // Fix PATH for packaged Mac apps (they only get /usr/bin:/bin:/usr/sbin:/sbin)
@@ -52,6 +53,76 @@ function saveSettings (s) {
 }
 
 let settings = loadSettings()
+
+// ---------------------------------------------------------------------------
+// Streaming log processors (kubectl logs --follow)
+// ---------------------------------------------------------------------------
+const logStreams = new Map() // key: "ns/pod/container" → { proc, file }
+const logDir = path.join(os.tmpdir(), 'k95s-logs')
+if (!fs.existsSync(logDir)) fs.mkdirSync(logDir, { recursive: true })
+
+function getLogFilePath (ns, pod, container) {
+  const safe = `${ns}/${pod}/${container || 'all'}`
+  return path.join(logDir, `${safe.replace(/[^a-zA-Z0-9/]/g, '_')}.log`)
+}
+
+function startLogStream (ns, pod, container) {
+  const key = `${ns}/${pod}/${container || ''}`
+  const existing = logStreams.get(key)
+  if (existing) {
+    // Restart stream (new pod/container selected)
+    existing.proc.kill()
+    logStreams.delete(key)
+  }
+
+  const args = ['logs', pod, '-n', ns, '--follow', '--tail=50']
+  if (container) args.push('-c', container)
+  const file = getLogFilePath(ns, pod, container)
+
+  // Truncate the file so old content doesn't linger
+  fs.writeFileSync(file, '')
+
+  const proc = spawn('kubectl', args, {
+    env: { ...process.env },
+    timeout: 0
+  })
+
+  // Redirect stderr to the log file too (for error messages)
+  const logFd = fs.openSync(file, fs.constants.O_WRONLY | fs.constants.O_APPEND)
+  proc.stdout.pipe(fs.createWriteStream({ fd: logFd, flags: 'a' }))
+  proc.stderr.pipe(fs.createWriteStream({ fd: logFd, flags: 'a' }))
+
+  proc.on('error', (err) => {
+    fs.appendFileSync(file, `\n[stream error: ${err.message}]\n`)
+  })
+
+  proc.on('exit', (code) => {
+    if (code !== 0 && code !== null) {
+      fs.appendFileSync(file, `\n[stream exited with code ${code}]\n`)
+    }
+    logStreams.delete(key)
+  })
+
+  logStreams.set(key, { proc, file })
+  return file
+}
+
+function stopLogStream (ns, pod, container) {
+  const key = `${ns}/${pod}/${container || ''}`
+  const stream = logStreams.get(key)
+  if (stream) {
+    stream.proc.kill()
+    logStreams.delete(key)
+  }
+}
+
+function readLogFile (file) {
+  try {
+    return fs.readFileSync(file, 'utf8')
+  } catch {
+    return ''
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Kubernetes client
@@ -518,6 +589,25 @@ ipcMain.handle('k8s:getLogs', (_, { podName, namespace, container, tail }) => {
   const args = ['logs', podName, '-n', namespace, `--tail=${tail || 300}`]
   if (container) args.push('-c', container)
   return kubectl(args, 20000)
+})
+
+// Streaming logs IPC handlers
+ipcMain.handle('k8s:startLogStream', (_, { podName, namespace, container }) => {
+  try {
+    const file = startLogStream(namespace, podName, container || null)
+    return { file }
+  } catch (e) {
+    return { error: e.message }
+  }
+})
+
+ipcMain.handle('k8s:stopLogStream', (_, { podName, namespace, container }) => {
+  stopLogStream(namespace, podName, container || null)
+  return { success: true }
+})
+
+ipcMain.handle('k8s:readLogFile', (_, { file }) => {
+  return readLogFile(file)
 })
 
 ipcMain.handle('k8s:getYaml', (_, { resourceType, name, namespace }) => {
